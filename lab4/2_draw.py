@@ -1,5 +1,5 @@
 import pygame
-from pygame.draw import *
+import pygame.draw as dr
 
 pygame.init()
 
@@ -10,11 +10,11 @@ x1 = 100; y1 = 100
 x2 = 300; y2 = 200
 N = 10
 color = (255, 255, 255)
-rect(screen, color, (x1, y1, x2 - x1, y2 - y1), 2)
+dr.rect(screen, color, (x1, y1, x2 - x1, y2 - y1), 2)
 h = (x2 - x1) // (N + 1)
 x = x1 + h
 for i in range(N):
-    line(screen, color, (x, y1), (x, y2))
+    dr.line(screen, color, (x, y1), (x, y2))
     x += h
 
 pygame.display.update()
