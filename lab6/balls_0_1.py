@@ -107,8 +107,10 @@ while not finished:
             finished = True
         #Обработка нажатия на левую кнопку мыши
         elif (event.type == pygame.MOUSEBUTTONDOWN) and (event.button == 1):
-            score += button_down(event.pos, coords[1:4:])
-            counter = 0
+            delt = button_down(event.pos, coords[1:4:])
+            score += delt
+            if (delt > 0):
+                counter = 0
             
     if counter == 0:# Создаем новый шарик, если старый уже давно бегает
         coords = new_ball()
