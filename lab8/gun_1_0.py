@@ -71,7 +71,7 @@ class Figure:
         if (self.x+self.r) >= WIDTH: self.v_x = -abs(self.v_x)
         if (self.x-self.r) <= 0: self.v_x = abs(self.v_x)
         if (self.y+self.r) >= HEIGHT:  self.v_y = -abs(self.v_y)
-        if (self.y-self.r) <= 0: self.v_y = abs(self.v_y)
+        if (self.y-self.r) <= min(SIZE)*0.12: self.v_y = abs(self.v_y)
 
     def check_figures(self):
         '''Проверка столкновения с фигурами. Для каждого подкласса реализовано отдельно'''
@@ -99,7 +99,7 @@ class Figure:
         count = 0
         while intersection > 0: #Генерим, пока не попадем в свободное место
             self.x = randint(0.1 * WIDTH, 0.9 * WIDTH)
-            self.y = randint(0.1 * HEIGHT, 0.9 * HEIGHT)
+            self.y = randint(min(SIZE)*0.12 + 0.1 * HEIGHT, 0.9 * HEIGHT)
             intersection = -1 #Разумеется, будет пересечение с самим собой
             for fig in figures:
                 if fig.r != 0 and abs(self.x - fig.x) <= self.r + fig.r \
@@ -368,16 +368,33 @@ def turn(angle, spisok):
                      r_0[1] - x*math.sin(angle) + y*math.cos(angle))
     return spisok
 
-def screen_update():
+def begin():
+    '''Задание начальных параметров для игры'''
+    global TIME, score, num_bullet, gun, figures
+    
+    TIME = 0 #Игра продоолжается, пока TIME < T * FPS
+    score = 0 #Набранный счет
+    num_bullet = 0 #Количество отрисовываемых пуль
+    gun = Gun()
+    figures = [] #Список объектов класса Figures
+
+    for i in range(NUM_RECTS):
+        figures.append(Rect(T_life * (i+1) / NUM_RECTS, i))
+    for i in range(NUM_BALLS):
+        figures.append(Ball(T_life * (i+1) / NUM_BALLS, i + NUM_RECTS))
+
+def screen_update(score):
     '''
     Рассчитывает перемещения объектов, заменяет пойманные на новые
     по истечении времени жизни объекта.
     Отрисовывает новое изображение на экране
+    :param score: набранный счет
     '''
     screen.fill(COLORS[0]) #Экран в белый
     for fig in figures:
         fig.move() #Расчет новых параметров объекта и его отрисовка
     gun.move()
+    menu(score)
     pygame.display.update()
 
 def check_figures_count(fig_1, fig_2, k_x, k_y):
@@ -398,6 +415,27 @@ def check_figures_count(fig_1, fig_2, k_x, k_y):
     fig_1.collision(delta_v_1)
     fig_2.collision(delta_v_2)
 
+def menu(score):
+    '''
+    Заполняет информационное поле -- зону меню
+    :param score: количество очков
+    '''
+    text('Score:', (min(SIZE)*0.05, min(SIZE)*0.05))
+    text(str(score), (min(SIZE)*0.05 + 120, min(SIZE)*0.05))
+    pygame.draw.rect(screen, (220, 220, 220), (min(SIZE)*0.05 + 200, min(SIZE)*0.045,
+                                               120, min(SIZE) * 0.055))
+    text('Restart', (min(SIZE)*0.05 + 200, min(SIZE)*0.05))
+
+def text(string, coords):
+    '''
+    Выводит заданный текст в заданном месте экрана
+    :param string: строка, которую выводим
+    :param coords: кортеж координат начала строки
+    '''
+    text1 = pygame.font.Font(None, 48)
+    text = text1.render(string, True, COLORS[-1])
+    screen.blit(text, coords)
+
 def end(score):
     '''
     Нормализация счета на Т = 100с. Запись результата в файл и вывод в консоль
@@ -405,7 +443,7 @@ def end(score):
     '''
     
     fin_score = int(score * 100 / T)
-    print("Время вышло. Ваш результат:", fin_score)
+    print("Игра окончена. Ваш результат:", fin_score)
     with open('Rating.txt', 'a') as file:
         file.write(str(fin_score) + ' ' + NAME + '\n')
 
@@ -425,19 +463,8 @@ SIZE = WIDTH, HEIGHT = 700, 700 #Размер окошка
 screen = pygame.display.set_mode(SIZE)
 T_life *= FPS #Перерасчет времени жизни в количество проходов цикла
 COLORS = const_colors()
-TIME = 0 #Игра продоолжается, пока TIME < T * FPS
-score = 0 #Набранный счет
-figures = [] #Кортеж объектов класса Figures
 
-num_bullet = 0
-gun = Gun()
-
-
-for i in range(NUM_RECTS):
-    figures.append(Rect(T_life * (i+1) / NUM_RECTS, i))
-for i in range(NUM_BALLS):
-    figures.append(Ball(T_life * (i+1) / NUM_BALLS, i + NUM_RECTS))
-
+begin() #Начальные параметры
     
 pygame.init()
 clock = pygame.time.Clock()
@@ -449,13 +476,21 @@ while not finished:
         if event.type == pygame.QUIT:
             finished = True
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            gun.fire_start(event)
+            #Если курсор вне зоны меню -- выстрел
+            if event.pos[1] > min(SIZE)*0.12:
+                gun.fire_start(event)
+            #Иначе -- обработка нажатия на кнопку
+            elif (event.pos[0] > min(SIZE)*0.05 + 200) and (event.pos[0] < min(SIZE)*0.05 + 320) and \
+                 (event.pos[1] > min(SIZE)*0.045) and (event.pos[1] < min(SIZE)*0.1):
+                end(score) #Сохранение текущего результата 
+                begin() #Начало новой игры
         elif event.type == pygame.MOUSEBUTTONUP:
-            gun.fire_end(event)
+            if gun.fire == True: #Если начали стрелять
+                gun.fire_end(event)
         elif event.type == pygame.MOUSEMOTION:
             gun.targetting(event)
 
-    screen_update() #Прорисовка сдвинутых объектов
+    screen_update(score) #Прорисовка сдвинутых объектов
     
     TIME+=1
     if TIME == T*FPS: #Завершение игры при окончании времени
