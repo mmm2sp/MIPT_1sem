@@ -53,7 +53,7 @@ class Figure:
 
         self.time += 1
         #Создание нового объекта по истечение времени жизни старого
-        if (self.time >= T_life) and (self.typ != 0):
+        if (self.time >= T_life) and (self.typ >= 0):
             self.new()
         elif self.r != 0:
             self.shift() #Преобразования координат
@@ -152,14 +152,27 @@ class Rect(Figure):
                 delta_y = self.y - fig.y
                 d = self.r + fig.r
                 if (abs(delta_x) <= d) and (abs(delta_y) <= d):
-                    if fig.typ == 0:
-                        self.kill()
-                        fig.kill()
+                    if fig.typ <= 0:
+                        self.kill(fig.typ)
+                        fig.kill(fig.typ)
                     else: #Определяем, с какой стороны прилетел: сверху или сбоку
                         if abs(delta_x - self.v_x + fig.v_x) > d:
                             check_figures_count(self, fig, 1, 0)
                         elif abs(delta_y - self.v_y + fig.v_y) > d:
                             check_figures_count(self, fig, 0, 1)
+                            
+    def kill(self, k):
+        '''
+        Создание бомбочки
+        :param k: тип убившего объекта
+        '''
+        super().kill()
+        if k == 0:
+            global num_bomb, bombs
+            new_bomb = Bomb(0, len(bombs))
+            new_bomb.new(self.x, self.y)
+            bombs.append(new_bomb)
+        
 
 class Ball(Figure):
     '''Класс шаров, наследуемый от Figure'''
@@ -196,11 +209,24 @@ class Ball(Figure):
         for fig in figures[self.num+1::]:
             if fig.r != 0:
                 if (self.x - fig.x)**2 + (self.y - fig.y)**2 <= (self.r + fig.r)**2:
-                    if fig.typ == 0:
-                        self.kill()
-                        fig.kill()
+                    if fig.typ <= 0:
+                        self.kill(fig.typ)
+                        fig.kill(fig.typ)
                     else:
                         check_figures_count(self, fig, 1, 1) #Изменение скоростей
+    
+    def kill(self, k):
+        '''
+        Создание бомбочки
+        :param k: тип убившего объекта
+        '''
+        super().kill()
+        if k == 0:
+            global num_bomb, bombs
+            new_bomb = Bomb(0, len(bombs))
+            new_bomb.new(self.x, self.y)
+            bombs.append(new_bomb)
+
 
 class Bullet(Figure):
     '''Класс пуль, наследуемый от Figure'''
@@ -236,20 +262,77 @@ class Bullet(Figure):
         '''Проверка столкновения с другими пулями'''
         for fig in figures[self.num+1::]:
             if (self.x - fig.x)**2 + (self.y - fig.y)**2 <= (self.r + fig.r)**2:
-                self.kill()
-                fig.kill()
+                self.kill(self.typ)
+                fig.kill(self.typ)
         
-    def kill(self):
-        '''Удаление пули из списка фигур'''
+    def kill(self, k):
+        '''
+        Удаление пули из списка фигур
+        :param k: тип убившего объекта
+        '''
         super().kill()
-        if self.r == 0:
-            global num_bullet, figures
-            num_bullet -= 1
-            figures = figures[:self.num:] + figures[self.num+1::]
-            for i in range(self.num, len(figures)): #Подстраиваем нумерацию
-                figures[i].num = i
+        global num_bullet, figures
+        num_bullet -= 1
+        figures = figures[:self.num:] + figures[self.num+1::]
+        for i in range(self.num, len(figures)): #Подстраиваем нумерацию
+            figures[i].num = i
 
-class Gun:
+
+class Bomb(Figure):
+    '''Класс бомб, наследуемый от Figure'''
+    def __init__(self, time, num):
+        '''
+        Начальные настройки класса
+        :param time: время, которое сущесствует этот объект (в проходах цикла)
+        :param num: номер объекта в списке фигур
+        '''
+        super().__init__(time, num)
+        self.typ = -1
+        
+    def new(self, x, y):
+        '''
+        Создание новой бомбы в указанном месте
+        :param x: абсцисса центра бомбы
+        :param y: ордината центра бомбы
+        '''
+        self.color = COLORS[1]
+        self.r = min(SIZE) / 100
+        self.x = x
+        self.y = y
+        self.v_x = 0
+        self.v_y = 0
+        
+    def draw(self):
+        '''Рисует бомбу'''
+        pygame.draw.rect(screen, self.color, (self.x - self.r, self.y - self.r,
+                                                  2*self.r, 2*self.r))
+    
+    def check_figures(self):
+        '''Проверка столкновения с фигурами'''
+        for fig in figures:
+            if fig.r != 0 and abs(self.x - fig.x) <= self.r + fig.r and \
+               abs(self.y - fig.y) <= self.r + fig.r:
+                fig.kill(self.typ)
+    
+    def check_walls(self):
+        '''Взаимодействие с границами экрана. Снизу - удаляем'''
+        super().check_walls()
+        if self.y >= figures[0].y:
+            self.kill(self.typ)
+    
+    def kill(self, k):
+        '''
+        Удаление бомбы из списка фигур
+        :param k: тип убившего объекта
+        '''
+        super().kill()
+        global bombs
+        bombs = bombs[:self.num:] + bombs[self.num+1::]
+        for i in range(self.num, len(bombs)): #Подстраиваем нумерацию
+            bombs[i].num = i    
+
+
+class Gun():
     '''
     Класс Пушка
     :param color: кортеж, задающий цвет объекта в системе RGB
@@ -264,20 +347,24 @@ class Gun:
     :param omega: угловая скорость дула пушки
     :param coords: список из координат углов ствола
     '''
-    def __init__(self, color, x):
+    def __init__(self, color, x, num):
         '''
         Начальные настройки класса
         '''
         self.main_color = color
         self.color = COLORS[-1]
+        self.num = num
+        self.hp = 10
         self.width = min(SIZE) / 50
         self.length = min(SIZE) / 20
+        self.r = self.width
         self.x = x
-        self.y = HEIGHT - self.width / 2
+        self.y = HEIGHT - self.width
         self.fire_power = 10
         self.fire = False
         self.v_x = 0
-        self.angle = math.pi
+        self.v_y = 0
+        self.angle = math.pi / 2
         self.omega = 0
         self.coords_0 = [(self.x, self.y), (self.x, self.y - self.width / 2),
                           (self.x + self.length, self.y - self.width / 2),
@@ -295,10 +382,9 @@ class Gun:
         '''
         Выстрел мячом. Происходит при отпускании кнопки мыши.
         Начальные значения компонент скорости мяча vx и vy зависят от положения мыши.
-        :param event: обрабатываемое событие
         '''
         global num_bullet, figures
-        new_bullet = Bullet(0, NUM_RECTS+NUM_BALLS+num_bullet)
+        new_bullet = Bullet(0, len(figures))
         num_bullet += 1
         x = (self.coords[2][0] + self.coords[3][0])*0.5
         y = (self.coords[2][1] + self.coords[3][1])*0.5
@@ -331,13 +417,18 @@ class Gun:
         self.omega = 0
         
     def check_walls(self):
-        '''Проверка столкновения со стенами'''
-        if self.x >= WIDTH - self.length:
+        '''Проверка столкновения со стенами и вторым танком'''
+        if self.x >= WIDTH - self.r:
             self.v_x = 0
-            self.x = WIDTH - self.length
-        if self.x <= self.length:
+            self.x = WIDTH - self.r
+        if self.x <= self.r:
             self.v_x = 0
-            self.x = self.length
+            self.x = self.r
+        if self.num == 0:
+            if figures[1].x - self.x <= 2*self.r:
+                self.v_x = 0
+                figures[1].v_x = 0
+                self.x = figures[1].x - 2*self.r - 1  
 
     def check_angle(self):
         '''Проверка направления дула в верхнюю часть'''
@@ -375,6 +466,8 @@ class Gun:
                           (self.x + self.length, self.y - self.width / 2),
                           (self.x + self.length, self.y + self.width / 2),
                           (self.x, self.y + self.width / 2)])
+        self.check_figures()
+            
         self.draw()
 
     def draw(self):
@@ -395,7 +488,35 @@ class Gun:
         else:
             self.color = COLORS[-1]
             self.fire_power = 10
-            
+
+    def kill(self, k):
+        '''
+        Убираем hp
+        :param k: тип убившего объекта
+        '''
+        self.hp -= 1
+        if self.hp <= 0:
+            self.hp = 0
+            global finished
+            finished = True
+        
+
+    def check_figures(self):
+        '''Проверка столкновения с другими фигурами'''
+        for fig in figures[2::]:
+            if fig.r != 0:
+                delta_x = self.x - fig.x
+                delta_y = self.y - fig.y
+                d = self.r + fig.r
+                if (abs(delta_x) <= d) and (abs(delta_y) <= d):
+                    if (fig.typ == 0 and fig.time > FPS / 5) or fig.typ < 0:
+                        fig.kill(fig.typ)
+                        self.kill(fig.typ)
+                    else: #Определяем, с какой стороны прилетел: сверху или сбоку
+                        if abs(delta_x - self.v_x + fig.v_x) > d:
+                            fig.collision((-2*fig.v_x, 0))
+                        elif abs(delta_y - self.v_y + fig.v_y) > d:
+                            fig.collision((0, -2*fig.v_y))
 
 def const_colors():
     '''
@@ -431,32 +552,33 @@ def turn(angle, spisok):
 
 def begin():
     '''Задание начальных параметров для игры'''
-    global TIME, score, num_bullet, gun, figures
+    global TIME, score, num_bullet, num_bomb, bombs, figures
     
     TIME = 0 #Игра продоолжается, пока TIME < T * FPS
     score = 0 #Набранный счет
     num_bullet = 0 #Количество отрисовываемых пуль
-    gun = [Gun((200, 200, 200), WIDTH/3), Gun((50, 50, 50), WIDTH*2 / 3)]
-    figures = [] #Список объектов класса Figures
+    num_bomb = 0 #Количество отрисовываемых бомб
+    bombs = [] #Список бомб
+    figures = [Gun((200, 200, 200), WIDTH/3, 0), Gun((50, 50, 50), WIDTH*2/3, 1)]
+    #Список объектов класса Figures
 
     for i in range(NUM_RECTS):
-        figures.append(Rect(T_life * (i+1) / NUM_RECTS, i))
+        figures.append(Rect(T_life * (i+1) / NUM_RECTS, i + 2))
     for i in range(NUM_BALLS):
-        figures.append(Ball(T_life * (i+1) / NUM_BALLS, i + NUM_RECTS))
+        figures.append(Ball(T_life * (i+1) / NUM_BALLS, i + NUM_RECTS + 2))
 
-def screen_update(score):
+def screen_update():
     '''
     Рассчитывает перемещения объектов, заменяет пойманные на новые
     по истечении времени жизни объекта.
     Отрисовывает новое изображение на экране
-    :param score: набранный счет
     '''
     screen.fill(COLORS[0]) #Экран в белый
+    for bomb in bombs:
+        bomb.move() #Расчет новых параметров объекта и его отрисовка
     for fig in figures:
         fig.move() #Расчет новых параметров объекта и его отрисовка
-    gun[0].move()
-    gun[1].move()
-    menu(score)
+    menu()
     pygame.display.update()
 
 def check_figures_count(fig_1, fig_2, k_x, k_y):
@@ -477,13 +599,14 @@ def check_figures_count(fig_1, fig_2, k_x, k_y):
     fig_1.collision(delta_v_1)
     fig_2.collision(delta_v_2)
 
-def menu(score):
+def menu():
     '''
     Заполняет информационное поле -- зону меню
-    :param score: количество очков
     '''
-    text('Score:', (min(SIZE)*0.05, min(SIZE)*0.05))
-    text(str(score), (min(SIZE)*0.05 + 120, min(SIZE)*0.05))
+    hp1 = figures[0].hp
+    hp2 = figures[1].hp
+    text('HP:', (min(SIZE)*0.05, min(SIZE)*0.05))
+    text(str(hp1) + ' vs ' + str(hp2), (min(SIZE)*0.05 + 60, min(SIZE)*0.05))
     pygame.draw.rect(screen, (220, 220, 220), (min(SIZE)*0.05 + 200, min(SIZE)*0.045,
                                                120, min(SIZE) * 0.055))
     text('Restart', (min(SIZE)*0.05 + 200, min(SIZE)*0.05))
@@ -510,15 +633,11 @@ def end(score):
         file.write(str(fin_score) + ' ' + NAME + '\n')
 
 
-NAME = input("Введите ваше имя:  ")
-print(NAME, "добро пожаловать в игру. Ваша задача уничтожить выстрелом наибольшее число фигур.")
-print("Чем дольше вы жмете на кнопку, тем больше исходная скорость снаряда.")
-print("За квадратики дается по баллу, за шарики по два")
-T_life = int(input("Введите желаемый период регенерации объектов (в секундах):  "))
-print("Результат (счет) в игре обратно пропорционален ее продолжительности.")
-T = int(input("Введите желаемую длительность игры в секундах:  "))
-NUM_BALLS = 4 #Наибольшее число шаров, одновременно присутствующих на экране
-NUM_RECTS = 5 #Наибольшее число квадратов, одновременно присутствующих на экране
+
+T_life = 10
+T = 100
+NUM_BALLS = 2 #Наибольшее число шаров, одновременно присутствующих на экране
+NUM_RECTS = 3 #Наибольшее число квадратов, одновременно присутствующих на экране
 
 FPS = 30
 SIZE = WIDTH, HEIGHT = 700, 700 #Размер окошка
@@ -538,66 +657,64 @@ while not finished:
         if event.type == pygame.QUIT:
             finished = True
         elif event.type == pygame.KEYDOWN:
-            if pygame.key.get_pressed()[pygame.K_w]:
-               gun[0].fire_start()
+            if pygame.key.get_pressed()[pygame.K_s]:
+               figures[0].fire_start()
             if pygame.key.get_pressed()[pygame.K_a]:
-               gun[0].shift_start(-1)
+               figures[0].shift_start(-1)
             if pygame.key.get_pressed()[pygame.K_d]:
-               gun[0].shift_start(1)
+               figures[0].shift_start(1)
             if pygame.key.get_pressed()[pygame.K_q]:
-               gun[0].turn_start(1)
+               figures[0].turn_start(1)
             if pygame.key.get_pressed()[pygame.K_e]:
-               gun[0].turn_start(-1)
+               figures[0].turn_start(-1)
 
-            if pygame.key.get_pressed()[pygame.K_i]:
-               gun[1].fire_start()
+            if pygame.key.get_pressed()[pygame.K_k]:
+               figures[1].fire_start()
             if pygame.key.get_pressed()[pygame.K_j]:
-               gun[1].shift_start(-1)
+               figures[1].shift_start(-1)
             if pygame.key.get_pressed()[pygame.K_l]:
-               gun[1].shift_start(1)
+               figures[1].shift_start(1)
             if pygame.key.get_pressed()[pygame.K_u]:
-               gun[1].turn_start(1)
+               figures[1].turn_start(1)
             if pygame.key.get_pressed()[pygame.K_o]:
-               gun[1].turn_start(-1)
+               figures[1].turn_start(-1)
                
         elif event.type == pygame.KEYUP:
-            if not pygame.key.get_pressed()[pygame.K_w]:
-                if gun[0].fire == True: #Если начали стрелять
-                    gun[0].fire_end()
+            if not pygame.key.get_pressed()[pygame.K_s]:
+                if figures[0].fire == True: #Если начали стрелять
+                    figures[0].fire_end()
             if not pygame.key.get_pressed()[pygame.K_a]:
-               gun[0].shift_end()
+               figures[0].shift_end()
             if not pygame.key.get_pressed()[pygame.K_d]:
-               gun[0].shift_end()
+               figures[0].shift_end()
             if not pygame.key.get_pressed()[pygame.K_q]:
-               gun[0].turn_end()
+               figures[0].turn_end()
             if not pygame.key.get_pressed()[pygame.K_e]:
-               gun[0].turn_end()
+               figures[0].turn_end()
 
-            if not pygame.key.get_pressed()[pygame.K_i]:
-                if gun[1].fire == True: #Если начали стрелять
-                    gun[1].fire_end()
+            if not pygame.key.get_pressed()[pygame.K_k]:
+                if figures[1].fire == True: #Если начали стрелять
+                    figures[1].fire_end()
             if not pygame.key.get_pressed()[pygame.K_j]:
-               gun[1].shift_end()
+               figures[1].shift_end()
             if not pygame.key.get_pressed()[pygame.K_l]:
-               gun[1].shift_end()
+               figures[1].shift_end()
             if not pygame.key.get_pressed()[pygame.K_u]:
-               gun[1].turn_end()
+               figures[1].turn_end()
             if not pygame.key.get_pressed()[pygame.K_o]:
-               gun[1].turn_end()
+               figures[1].turn_end()
 
                
         elif event.type == pygame.MOUSEBUTTONDOWN:
             #Если курсор в зоне меню -- обработка нажатия
             if (event.pos[0] > min(SIZE)*0.05 + 200) and (event.pos[0] < min(SIZE)*0.05 + 320) and \
             (event.pos[1] > min(SIZE)*0.045) and (event.pos[1] < min(SIZE)*0.1):
-                end(score) #Сохранение текущего результата 
                 begin() #Начало новой игры
                 
-    screen_update(score) #Прорисовка сдвинутых объектов
+    screen_update() #Прорисовка сдвинутых объектов
     
     TIME+=1
     if TIME == T*FPS: #Завершение игры при окончании времени
         finished = True
 
-end(score)#Сохранение результатов игры в файл и вывод в консоль
 pygame.quit()
